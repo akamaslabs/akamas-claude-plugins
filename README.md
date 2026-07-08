@@ -15,7 +15,7 @@ maintain Akamas optimization pack repositories (like `optimization-packs/vllm`).
 Add this repo as a plugin marketplace, then install a plugin from it:
 
 ```
-/plugin marketplace add <org>/akamas-claude-plugins
+/plugin marketplace add akamaslabs/akamas-claude-plugins
 /plugin install akamas-optimization-pack
 ```
 
