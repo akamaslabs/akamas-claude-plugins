@@ -1,0 +1,6 @@
+{
+  "name": "akamas-optimization-pack",
+  "description": "Scaffold new Akamas optimization packs from scratch, or safely extend existing ones (metrics, parameters, component types, telemetry providers).",
+  "version": "0.1.0",
+  "author": { "name": "Akamas" }
+}

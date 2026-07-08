@@ -1,0 +1,11 @@
+{
+  "name": "akamas-plugins",
+  "owner": { "name": "Akamas" },
+  "plugins": [
+    {
+      "name": "akamas-optimization-pack",
+      "source": "./plugins/akamas-optimization-pack",
+      "description": "Scaffold new Akamas optimization packs and safely modify existing ones."
+    }
+  ]
+}
