@@ -11,8 +11,8 @@ steps below in order every time this skill runs.
 Check whether `optimizationPack.yaml` exists in the current working directory.
 
 - If it does **not** exist (empty directory, or a repo unrelated to an existing pack) →
-  run in **Create mode** (§4).
-- If it **does** exist → run in **Modify mode** (§5).
+  run in **Create mode** (§5).
+- If it **does** exist → run in **Modify mode** (§6).
 
 Do not ask the user which mode to use — determine it yourself from the filesystem.
 
@@ -59,7 +59,72 @@ Prefer the live docs over the bundled reference whenever they disagree, and expl
 tell the user about the discrepancy you found — don't silently resolve it in favor of
 one source.
 
-## 4. Create mode — full scaffold
+## 4. Hard constraints — known build-breaking pitfalls
+
+These apply in **both** modes, to every file you write or edit. None of these are
+caught by a `validate` command — there isn't one (see `reference/akamas-cli.md`) — they
+only surface when `akamas build`/`install` runs, often minutes later in a CI pipeline.
+Check for all of them yourself before declaring the pack done.
+
+### 4a. Every `description` field must be ≤ 256 characters
+
+Applies to every `description` field you write or edit: `optimizationPack.yaml`,
+`component-types/*.yaml`, `metrics/*.yaml`, `parameters/*.yaml`, and
+`telemetry-providers/*.yaml`.
+
+`akamas build optimization-pack` fails if any `description` exceeds 256 characters.
+This is not documented in the official schema reference — it's a real build-time
+failure, so treat it as a hard limit, not a stylistic preference:
+
+- Keep every description you generate at or under 256 characters, counting the exact
+  string that will land in the YAML.
+- If the user supplies or asks for a longer description, don't silently truncate it —
+  shorten it while preserving the meaning, or ask the user to shorten it, and tell them
+  why (the 256-character build limit).
+- Treat this as part of the structural validation in both Create mode (§5) and Modify
+  mode (§6) — count every description's length before declaring the pack done.
+
+### 4b. Quote categorical values that look like booleans, numbers, or null
+
+Applies to every `categorical` parameter domain in `component-types/*.yaml`
+(`domain.categories` and the matching `defaultValue`).
+
+YAML parses unquoted `true`, `false`, `yes`, `no`, `on`, `off`, `~`, and `null` as
+native booleans/null, not strings. If a categorical parameter's `categories:` or
+`defaultValue:` uses one of these unquoted, the built pack JSON gets a native JSON
+boolean/null in that slot instead of a string — which breaks the build, because every
+other categorical parameter in a real pack uses string values (`"auto"`, `"fcfs"`, ...)
+and Akamas expects categorical values to be strings.
+
+This is especially common because Akamas' schema has **no native boolean domain type** —
+on/off flags are modeled as `categorical` with two string categories, which is exactly
+where this YAML gotcha bites:
+
+```yaml
+# Correct — values explicitly quoted as strings
+- name: enable_expert_parallel
+  domain:
+    type: categorical
+    categories: ["true", "false"]
+  defaultValue: "false"
+```
+```yaml
+# Wrong — unquoted true/false become native JSON booleans in the built pack
+- name: enable_expert_parallel
+  domain:
+    type: categorical
+    categories: [true, false]
+  defaultValue: false
+```
+
+Always quote such values explicitly, even though it reads redundantly. Confirmed in
+practice: a pack failed its GitLab build pipeline because 5 boolean-flag parameters
+(`enable_expert_parallel`, `enforce_eager`, `disable_cascade_attn`,
+`async_scheduling`, `disable_custom_all_reduce`) had unquoted `true`/`false` categories
+while every other categorical parameter in the same pack correctly used quoted strings —
+that inconsistency is the tell to look for when auditing an existing pack.
+
+## 5. Create mode — full scaffold
 
 Run this when no `optimizationPack.yaml` was found in the current directory.
 
@@ -103,8 +168,11 @@ Run this when no `optimizationPack.yaml` was found in the current directory.
    - Name patterns match `^[a-zA-Z][a-zA-Z0-9_]*$` for component types and parameters.
    - Every parameter and metric referenced by a component type's `parameters:`/
      `metrics:` array is actually declared in `parameters/*.yaml` / `metrics/*.yaml`.
+   - Every `description` field written is ≤256 characters (§4a).
+   - Every categorical parameter's `categories:`/`defaultValue:` values that look like
+     booleans, numbers, or null are explicitly quoted as strings (§4b).
 
-## 5. Modify mode — targeted edits
+## 6. Modify mode — targeted edits
 
 Run this when `optimizationPack.yaml` already exists in the current directory.
 
@@ -136,8 +204,13 @@ Run this when `optimizationPack.yaml` already exists in the current directory.
    about this before making the change, and only proceed after they confirm.
 5. **Update the pack's `README.md`** bullet list of component types if the set of
    component types changed.
+6. **Before declaring the change done**, check §4's constraints against whatever you
+   just touched — even a single new metric or parameter, not just full-pack scaffolds:
+   - Every `description` field you added or edited is ≤256 characters (§4a).
+   - Any categorical parameter you added or edited has its boolean/number/null-looking
+     values explicitly quoted as strings (§4b).
 
-## 6. After either mode
+## 7. After either mode
 
 Do not run `akamas build` or `akamas install` yourself — they require a configured,
 authenticated `akamas` CLI session that this skill does not have. Instead, tell the user

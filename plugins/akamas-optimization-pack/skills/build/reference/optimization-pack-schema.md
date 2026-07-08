@@ -26,7 +26,7 @@ Real packs commonly use one flat file per directory, named after the technology
 | Field         | Type   | Required | Constraints                          |
 |---------------|--------|----------|---------------------------------------|
 | `name`        | string | yes      | no spaces; identity used across versions/upgrades |
-| `description` | string | yes      | —                                      |
+| `description` | string | yes      | **≤256 characters** — `akamas build` fails on longer strings |
 | `version`     | string | yes      | `MAJOR.MINOR.PATCH`                    |
 | `weight`      | int    | yes      | docs say `> 0`, but a real shipped pack uses `0` — don't hard-fail on 0, flag it instead |
 | `tags`        | array  | no       | default `[]`                           |
@@ -43,14 +43,17 @@ weight: 0
 
 ```yaml
 name: string           # required, ^[a-zA-Z][a-zA-Z0-9_]*$, unique instance-wide
-description: string    # required
+description: string    # required, ≤256 characters — build fails if longer
 properties: object     # optional, free-form
 parameters:             # required array — binds parameters declared in parameters/*.yaml
   - name: string                       # must match a name in parameters/*.yaml
     domain:
       type: real | integer | categorical
       domain: [min, max]               # for real/integer
-      categories: [a, b, c]            # for categorical
+      categories: [a, b, c]            # for categorical — ALWAYS quote values that
+                                        # look like YAML booleans/numbers/null (true,
+                                        # false, yes, no, on, off, ~) as strings, e.g.
+                                        # ["true", "false"], never [true, false]
     defaultValue: <value in domain>    # required
     decimals: 0-255                    # optional, default 5
     operators:                          # optional in practice despite docs table; only
@@ -76,12 +79,29 @@ metrics:
   - name: request_success_rate
 ```
 
+Akamas has **no native boolean domain type**. On/off flags are modeled as `categorical`
+with two string categories — quote them explicitly, since unquoted `true`/`false` are
+parsed by YAML as native booleans and land as native JSON booleans in the built pack,
+breaking the build:
+```yaml
+# Correct
+- name: enforce_eager
+  domain: { type: categorical, categories: ["true", "false"] }
+  defaultValue: "false"
+```
+```yaml
+# Wrong — breaks the build
+- name: enforce_eager
+  domain: { type: categorical, categories: [true, false] }
+  defaultValue: false
+```
+
 ## `metrics/*.yaml`
 
 ```yaml
 metrics:
   - name: string          # required, no spaces, conventionally snake_case
-    description: string   # required
+    description: string   # required, ≤256 characters — build fails if longer
     unit: string           # optional; canonical units below, or any custom string
 ```
 Canonical units: temporal (`nanoseconds`…`hours`), information (`bits`…`petabytes`),
@@ -93,7 +113,7 @@ canonical `percent` over ad hoc variants like `percentage` for consistent chart 
 ```yaml
 parameters:
   - name: string          # required, ^[a-zA-Z][a-zA-Z0-9_]*$
-    description: string   # required
+    description: string   # required, ≤256 characters — build fails if longer
     unit: string           # optional
     restart: boolean       # optional, default false
 ```
@@ -105,7 +125,7 @@ parameter name can have different domains/defaults across component types that u
 
 ```yaml
 name: string          # required, unique instance-wide
-description: string   # required
+description: string   # required, ≤256 characters — build fails if longer
 dockerImage: string   # required — image implementing the extraction logic
 ```
 Only needed when introducing a data source Akamas doesn't already support. Most packs
@@ -143,3 +163,16 @@ omit this entirely and rely on existing providers (Prometheus, Dynatrace, CSV, .
    synthesized from the schema plus the one-line upgrade instruction in the creation doc.
 5. No documented guardrails for breaking changes to shared parameter/component-type
    definitions across pack versions.
+6. All `description` fields (pack, component type, metric, parameter, telemetry
+   provider) are capped at **256 characters** — `akamas build` fails on longer strings.
+   This is not stated in the official schema docs; treat it as a hard limit, not a soft
+   one like `weight`.
+7. Categorical parameter values that look like YAML boolean/null literals (`true`,
+   `false`, `yes`, `no`, `on`, `off`, `~`) must be explicitly quoted as strings in both
+   `categories:` and `defaultValue:` — otherwise YAML parses them as native
+   booleans/null, which land as native JSON booleans/null in the built pack JSON and
+   break the build, since every other categorical parameter uses string values.
+   Confirmed in practice on 5 boolean-flag parameters modeled as categorical
+   (`enable_expert_parallel`, `enforce_eager`, `disable_cascade_attn`,
+   `async_scheduling`, `disable_custom_all_reduce`) that had unquoted `true`/`false`
+   while the rest of the pack's categorical parameters correctly used quoted strings.
