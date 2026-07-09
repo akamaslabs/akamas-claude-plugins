@@ -18,6 +18,7 @@ Add this repo as a plugin marketplace, then install a plugin from it:
 ```
 /plugin marketplace add akamaslabs/akamas-claude-plugins
 /plugin install akamas-optimization-pack
+/plugin install akamas-study-manager
 ```
 
 ## Testing a plugin locally
