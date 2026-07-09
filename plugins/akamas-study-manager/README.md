@@ -52,7 +52,11 @@ unrelated working directory — containing:
   already-installed pack, e.g. a stock Kubernetes/GPU component type)
 - `system/telemetry/*.yaml` — the telemetry instance(s) wiring an existing
   provider (Prometheus, Dynatrace, ...) to real metric queries
-- `scripts/` — helper shell scripts invoked by workflow `Executor` tasks
+- `scripts/` — helper shell scripts invoked by workflow `Executor` tasks; the
+  apply-config script always prints the complete logs of the workload it just
+  patched, and the load-test script always prints the complete logs of the
+  job it launches, both to stdout, so a failed trial stays debuggable from
+  Akamas's own captured task output
 - `templates/` — config templates with `${Component.param}` placeholders,
   rendered by `FileConfigurator` tasks
 - `README.md` — describes the study; **always states the creation date** and
@@ -94,7 +98,10 @@ Structural changes (a new component, a new task, a changed parameter
 selection, etc.) get a "last modified" note added to the study's `README.md`,
 and the README's "Setup & run" command section is kept in sync with the
 change — including the delete-and-recreate commands for resources that have
-no CLI update verb for the field that changed.
+no CLI update verb for the field that changed. When editing an apply-config
+or load-test workflow task/script, the workload/job log-dump described above
+is preserved, or added if a pre-existing script is missing it — never
+silently dropped.
 
 ## What it does NOT do
 

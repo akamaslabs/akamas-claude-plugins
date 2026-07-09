@@ -166,6 +166,34 @@ Run this when no top-level file with `kind: study` was found in the target direc
      generic `name`/`datasourceName`).
    - Write the workflow file's tasks using the operator(s) chosen in step 1, and any
      `templates/*_template.yaml` + `scripts/*.sh` it references.
+   - **Hard requirement: every apply-config script and every load-test script must print
+     the full logs of the workload/job to stdout**, so Akamas's per-task captured output
+     is enough to debug a failed/anomalous trial after the fact — never leave those logs
+     only on the remote host or suppressed. Concretely:
+     - Kubernetes (`FileConfigurator`+`Executor`+`kubectl`, the only pattern confirmed
+       against a real study): right after `kubectl rollout status ...` succeeds in the
+       apply-config script, add `kubectl logs deployment/<name> -n <namespace>
+       --all-containers --tail=-1`; right after `kubectl wait --for=condition=complete
+       job/<job-name> ...` in the load-test script, add `kubectl logs job/<job-name> -n
+       <namespace> --all-containers --tail=-1` — run that `kubectl logs` line
+       unconditionally (success and failure branches both) so a failing job is
+       debuggable too.
+     - Non-Kubernetes: SSH+service-restart → dump `journalctl -u <service> --no-pager
+       -n 500` (or an equivalent `tail`) after the restart, and print the load-test
+       tool's output/report to stdout rather than only writing a file no one reads;
+       `ansible-playbook` applies → never suppress its output (no `-q`, no
+       redirect to `/dev/null`), and add an explicit log-dump step if the playbook
+       doesn't already surface the target's own logs; dedicated operators with no raw
+       script to edit (`OracleConfigurator`, `LoadRunner`, `LoadRunner Enterprise`,
+       `NeoLoadWeb`, `SparkSubmit`/`SparkSSHSubmitOperator`/`SparkLivy`) → you can't add a log line, so instead
+       never disable/skip that operator's own built-in output/report visibility, and
+       call this out to the user as a caveat.
+     - Universal rule: never suppress a workload's own stdout/log output when it IS
+       captured via a raw Executor script (no `> /dev/null`, no `-q`/`--quiet`), and
+       explicitly fetch+print logs whenever the apply/launch command itself doesn't
+       already stream them.
+     - This is a **repo-level convention this skill enforces**, not an Akamas schema
+       rule — see `reference/study-schema.md` for the full rationale and worked examples.
    - Write the study manifest's `goal` (and `constraints`/`kpis` if applicable),
      `windowing` (or explicitly omit it, noting the "entire trial window" default),
      `parametersSelection` (only for parameters the pack actually declares, with domains
@@ -210,6 +238,9 @@ Run this when no top-level file with `kind: study` was found in the target direc
    - The README.md's "Setup & run" section is present and its commands actually match
      the files you created (real filenames/paths, correct system/study names, correct
      order) — not a copy-pasted generic template.
+   - Every apply-config script and every load-test script under `scripts/*.sh` includes
+     the full-log-dump-to-stdout requirement above (workload logs dumped once the config
+     apply succeeds; job/load-test logs dumped after it runs, including on failure).
 
 ## 6. Modify mode — targeted edits
 
@@ -233,7 +264,10 @@ study root.
    - **New/changed workflow task**: edit the workflow file's `tasks[]`, choosing an
      operator that matches how the user says config changes are applied for real (ask if
      unclear) — do not invent host/key/address values (§5 step 2's guardrail applies
-     here too).
+     here too). If the task is (or invokes) an apply-config or load-test script, it must
+     include the full-log-dump-to-stdout requirement from §5 step 3 — if you're editing a
+     pre-existing script that's missing it, add it as part of this edit and tell the user
+     you did so; never silently drop it during an edit.
    - **Study-level change** (`parametersSelection`/`goal`/`constraints`/`kpis`/`windowing`/
      `steps`): edit the study manifest directly. Keep any narrowed
      `parametersSelection` domain a subset of the pack's declared domain for that
@@ -253,8 +287,10 @@ study root.
      leave the README's command block silently stale after a structural change.
 5. **Validate before declaring done**, same checklist as Create mode step 5, scoped to
    whatever you touched — including re-checking that no invented infrastructure detail
-   was introduced, that every changed cross-reference still resolves, and that the
-   README's "Setup & run" section matches the current state of the files.
+   was introduced, that every changed cross-reference still resolves, that the README's
+   "Setup & run" section matches the current state of the files, and that every
+   apply-config/load-test script you touched includes the full-log-dump-to-stdout
+   requirement (added it if it was missing, per step 3 above).
 
 ## 7. After either mode
 

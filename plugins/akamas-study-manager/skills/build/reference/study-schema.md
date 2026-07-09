@@ -416,6 +416,90 @@ the real example) is done indirectly via `Executor` shelling out to `kubectl`.
 | **LoadRunner** | Run a LoadRunner Professional scenario | `controller{hostname,username,password}` required, `scenarioFile` required, `resultFolder` required (supports `{study}`/`{exp}`/`{trial}` placeholders), `loadrunnerResOverride=res`, `timeout=2h`, `checkFrequency=1m`, `executable`, `component` |
 | **LoadRunner Enterprise** | Run an LRE test set | `address`, `username`, `password`, `domain`, `project`, `testId`, `testSet`, `timeSlot` (multiple of 15m, >30m) all required; `tenantID` (LR2020 only), `pollingInterval=30`, `verifySSL=true`, `component` |
 
+### Logging convention for apply-config / load-test scripts (a plugin convention, not an Akamas schema rule)
+
+**This is a convention this skill enforces for debuggability — it is not an
+Akamas-documented or schema-verified requirement.** Nothing below is sourced from
+`docs.akamas.io`; do not cite it as such, and do not let it dilute the
+carefully-sourced/gap-flagged material elsewhere in this document.
+
+**The rule**: every apply-config script/task and every load-test script/task this skill
+writes (create mode) or edits (modify mode) must print the *complete* logs of the
+workload/job it just touched to stdout — right after (a) confirming a config change was
+applied/rolled out to the real target workload, and (b) the load-test job/process
+finishes (or fails). Akamas only captures each workflow task's stdout as its per-task/
+per-trial execution record; any log left only on the remote host, in a file no one
+reads, or suppressed with a quiet flag is invisible when a trial needs to be debugged
+after the fact.
+
+**Kubernetes pattern — before/after.** Given the real example already documented above
+(`Apply config` running `scripts/apply_config.sh`, `RunTest` running
+`scripts/run_test_throughput.sh`), the scripts before this convention is applied look
+like:
+```bash
+# scripts/apply_config.sh (before)
+kubectl apply -f /path/to/rendered-deployment.yaml -n <namespace>
+kubectl rollout status deployment/<name> -n <namespace> --timeout=1200s
+```
+```bash
+# scripts/run_test_throughput.sh (before)
+BENCH_FILE=/path/to/job.yaml
+kubectl delete -f $BENCH_FILE ; kubectl apply -f $BENCH_FILE
+kubectl wait --for=condition=complete job/<job-name> -n <namespace> --timeout=1000s
+```
+Extended to satisfy the convention:
+```bash
+# scripts/apply_config.sh (after)
+kubectl apply -f /path/to/rendered-deployment.yaml -n <namespace>
+kubectl rollout status deployment/<name> -n <namespace> --timeout=1200s
+echo "--- Logs for deployment/<name> after config apply ---"
+kubectl logs deployment/<name> -n <namespace> --all-containers --tail=-1
+```
+```bash
+# scripts/run_test_throughput.sh (after)
+BENCH_FILE=/path/to/job.yaml
+kubectl delete -f $BENCH_FILE ; kubectl apply -f $BENCH_FILE
+kubectl wait --for=condition=complete job/<job-name> -n <namespace> --timeout=1000s
+echo "--- Logs for job/<job-name> ---"
+kubectl logs job/<job-name> -n <namespace> --all-containers --tail=-1
+```
+If the load-test job can fail rather than complete, run the `kubectl logs` line
+unconditionally (or in both the success and failure branch) so a failing trial is just
+as debuggable as a passing one — don't gate the log dump behind `kubectl wait` exiting 0.
+
+**Generalization for non-Kubernetes mechanisms:**
+- **SSH + service-restart** (a raw `Executor` command, no Kubernetes involved): after
+  restarting the service, dump its log source to stdout before the task ends — e.g.
+  `journalctl -u <service> --no-pager -n 500` or `tail -n 500 /var/log/<service>/*.log`.
+  Equally, once the load-test tool finishes, print its output/log file's contents to
+  stdout (e.g. `cat <result-file>`) rather than leaving it only on disk.
+- **Ansible-based apply** (`Executor` running `ansible-playbook ...`): run it without
+  suppressing output — no `-q`, no redirect to `/dev/null` — so its own task-level output
+  (which already shows what changed) reaches stdout. If the playbook itself doesn't
+  surface the target service's own logs, add an explicit follow-up step that does (same
+  `journalctl`/`tail` idea as above).
+- **Dedicated, non-script operators** (`OracleConfigurator`, `LoadRunner`,
+  `LoadRunner Enterprise`, `NeoLoadWeb`, `SparkSubmit`/`SparkSSHSubmitOperator`/
+  `SparkLivy`) have no raw script for this skill to extend with a `kubectl logs`-style
+  line. **Caveat**: for these, the convention translates to "don't disable or skip
+  whatever built-in output/report visibility that operator already offers" (e.g. don't
+  turn off `LoadRunner`'s result-folder reporting, don't strip verbosity flags) — this
+  skill cannot literally inject a log-dump step into an operator it doesn't control the
+  internals of, and should say so if asked to apply this convention to one of them.
+
+**The one universal, always-actionable rule**: on any raw `Executor` script, never
+suppress or discard the target workload's/job's own stdout or log output — no
+`> /dev/null`, no `--quiet`/`-q` flags on the workload's own log/report tooling — and
+explicitly fetch and print logs whenever the apply/launch command itself doesn't already
+stream them (`kubectl apply`/`ansible-playbook` only stream their *own* operation's
+output, not the target application's logs, which is exactly why an explicit
+`kubectl logs`/`journalctl`/`tail` call is required on top).
+
+When this skill edits a pre-existing apply-config or load-test script that is missing
+this pattern, it must add it as part of the edit and explicitly tell the user it did so
+— never silently leave a script without complete log output while touching it for an
+unrelated reason.
+
 ---
 
 ## 5. `<study-name>.yaml` (`kind: study`)
