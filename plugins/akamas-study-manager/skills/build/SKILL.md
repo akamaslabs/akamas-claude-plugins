@@ -182,6 +182,14 @@ Run this when no top-level file with `kind: study` was found in the target direc
      the study's steps.
    - An explicit list of any placeholders left in the files (per step 2) that the user
      must fill in before running the study.
+   - **A "Setup & run" section with every `akamas` CLI command needed to configure and
+     launch this exact study on a real Akamas instance, in dependency order** (hard
+     requirement — see §7 for the exact command set/order to use). This is not optional
+     polish: the README is the persistent, self-contained record of how to run this
+     study, so the full command sequence must live in the file itself, not only in your
+     chat reply. Include both the typed per-resource form and the bulk `-f` alternative,
+     exactly as §7 specifies, with real file paths/names substituted in (not the generic
+     `<placeholders>` §7 uses when talking to the user in chat).
 5. **Validate the result structurally before declaring done**:
    - Every required field is present on every resource (`kind`, `name`, `system`,
      `workflow`, etc. — see `reference/study-schema.md` per-resource tables).
@@ -199,6 +207,9 @@ Run this when no top-level file with `kind: study` was found in the target direc
    - No invented infrastructure detail slipped in unmarked — every host/key/address/
      credential/namespace is either a real value the user gave you or a flagged
      placeholder.
+   - The README.md's "Setup & run" section is present and its commands actually match
+     the files you created (real filenames/paths, correct system/study names, correct
+     order) — not a copy-pasted generic template.
 
 ## 6. Modify mode — targeted edits
 
@@ -227,21 +238,34 @@ study root.
      `steps`): edit the study manifest directly. Keep any narrowed
      `parametersSelection` domain a subset of the pack's declared domain for that
      parameter.
-4. **Update the README.md** with at least a "last modified" note (date + one-line summary
-   of the change) whenever the change is structural (added/removed/renamed a resource,
-   changed the goal, changed which component types/metrics/parameters are in play). A
-   purely cosmetic edit (e.g. fixing a typo in a description) doesn't require this, but
-   default to updating it if in doubt.
+4. **Update the README.md**:
+   - Add at least a "last modified" note (date + one-line summary of the change)
+     whenever the change is structural (added/removed/renamed a resource, changed the
+     goal, changed which component types/metrics/parameters are in play). A purely
+     cosmetic edit (e.g. fixing a typo in a description) doesn't require this, but
+     default to updating it if in doubt.
+   - **Update the "Setup & run" section (hard requirement, same as §5 step 4)** so it
+     still reflects reality after the edit. Per §7's modify-mode guidance: if the
+     resource you changed has an update verb that applies to the changed field (e.g.
+     `akamas update study` for optimizer-tuning flags), replace/add that command; if not,
+     state plainly in the README that the resource must be deleted and recreated, and
+     give the exact `akamas delete ...` + `akamas create ...` commands for it. Never
+     leave the README's command block silently stale after a structural change.
 5. **Validate before declaring done**, same checklist as Create mode step 5, scoped to
    whatever you touched — including re-checking that no invented infrastructure detail
-   was introduced and that every changed cross-reference still resolves.
+   was introduced, that every changed cross-reference still resolves, and that the
+   README's "Setup & run" section matches the current state of the files.
 
 ## 7. After either mode
 
 Do not run any `akamas` command yourself — they require a configured, authenticated
-`akamas` CLI session that this skill does not have. Instead, tell the user the exact next
-manual steps, in the correct dependency order (per `reference/akamas-cli.md`), adapted to
-what you actually created/changed. For a full Create-mode scaffold, that's typically:
+`akamas` CLI session that this skill does not have. This command set is not just a chat
+reply: per §5 step 4 / §6 step 4, the exact same commands (with real file paths, not
+placeholders) must already be written into the study's `README.md` before you say you're
+done. Telling the user here, in chat, is a secondary confirmation of what's already
+persisted in the file — never the only place these commands live. Adapt the set to what
+you actually created/changed, in the correct dependency order (per
+`reference/akamas-cli.md`). For a full Create-mode scaffold, that's typically:
 
 ```
 akamas create system            system/system.yaml

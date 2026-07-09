@@ -58,7 +58,11 @@ unrelated working directory — containing:
 - `README.md` — describes the study; **always states the creation date** and
   the **versions in play**: the optimization pack's name and version, the
   target software's version/image tag/model name (if known from the
-  conversation or templates), and the telemetry provider used
+  conversation or templates), and the telemetry provider used. It also
+  **always includes a "Setup & run" section with every `akamas` CLI command
+  needed to create every resource and start the study**, in dependency order,
+  with real file paths — not just reported in chat, but persisted in the file
+  itself
 
 Before writing any of this, it asks **how configuration changes actually reach
 your real target system** (a templated Kubernetes manifest applied via
@@ -87,7 +91,10 @@ Makes targeted edits to an existing study:
   `steps`, or any other top-level study field
 
 Structural changes (a new component, a new task, a changed parameter
-selection, etc.) get a "last modified" note added to the study's `README.md`.
+selection, etc.) get a "last modified" note added to the study's `README.md`,
+and the README's "Setup & run" command section is kept in sync with the
+change — including the delete-and-recreate commands for resources that have
+no CLI update verb for the field that changed.
 
 ## What it does NOT do
 
