@@ -9,6 +9,7 @@ maintain Akamas optimization pack repositories (like `optimization-packs/vllm`).
 ## Plugins
 
 - **[akamas-optimization-pack](plugins/akamas-optimization-pack/README.md)** — scaffold new Akamas optimization packs and safely modify existing ones.
+- **[akamas-study-manager](plugins/akamas-study-manager/README.md)** — scaffold new Akamas studies (system, components, telemetry, workflow, study manifest) and safely modify existing ones.
 
 ## Installing from this repo
 

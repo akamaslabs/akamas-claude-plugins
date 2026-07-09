@@ -6,6 +6,11 @@
       "name": "akamas-optimization-pack",
       "source": "./plugins/akamas-optimization-pack",
       "description": "Scaffold new Akamas optimization packs and safely modify existing ones."
+    },
+    {
+      "name": "akamas-study-manager",
+      "source": "./plugins/akamas-study-manager",
+      "description": "Scaffold new Akamas studies (system, components, telemetry, workflow, study) and safely modify existing ones."
     }
   ]
 }
