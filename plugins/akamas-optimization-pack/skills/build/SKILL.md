@@ -124,6 +124,26 @@ practice: a pack failed its GitLab build pipeline because 5 boolean-flag paramet
 while every other categorical parameter in the same pack correctly used quoted strings —
 that inconsistency is the tell to look for when auditing an existing pack.
 
+### 4c. Pick `categorical` vs `ordinal` from the tech's own docs — never guess
+
+Applies to every parameter you add or edit whose legal values are a fixed set of
+literals, in both modes.
+
+Akamas has two distinct domain types for this case, and they are not interchangeable —
+see `reference/optimization-pack-schema.md`'s "Categorical vs ordinal" section for the
+full explanation and real examples (AWS EC2's `aws_ec2_instance_size`, Node.js's
+`v8_max_semi_space_size_ordinal`):
+
+- `categorical` — values with no meaningful order (algorithm/policy names, on/off flags).
+- `ordinal` — values with a real natural order (sizes, tiers, discrete power-of-2 steps),
+  where list order in `categories:` encodes the rank.
+
+Before adding any such parameter, read the actual target technology's documentation for
+that setting (JVM flag reference, vLLM engine-args docs, database parameter docs, cloud
+provider instance-type docs, etc.) — don't default to `categorical` just because it needs
+no further thought. If the values have a real ordering, use `ordinal`. This determines how
+Akamas' optimizer explores the parameter's space, so getting it wrong isn't cosmetic.
+
 ## 5. Create mode — full scaffold
 
 Run this when no `optimizationPack.yaml` was found in the current directory.
@@ -171,6 +191,8 @@ Run this when no `optimizationPack.yaml` was found in the current directory.
    - Every `description` field written is ≤256 characters (§4a).
    - Every categorical parameter's `categories:`/`defaultValue:` values that look like
      booleans, numbers, or null are explicitly quoted as strings (§4b).
+   - Every fixed-value parameter uses `categorical` or `ordinal` correctly per the tech's
+     own docs, not by default/guess (§4c).
 
 ## 6. Modify mode — targeted edits
 
@@ -185,7 +207,8 @@ Run this when `optimizationPack.yaml` already exists in the current directory.
    - **New parameter**: add an entry to the relevant `parameters/*.yaml` — identity
      fields only (`name` / `description` / `unit` / `restart`) — then bind it in the
      target component type's `parameters:` array with `domain` / `defaultValue` /
-     `decimals` / optional `operators`.
+     `decimals` / optional `operators`. If the domain is a fixed set of literals, decide
+     `categorical` vs `ordinal` from the technology's own docs, not by default (§4c).
    - **New component type**: add a new file under `component-types/`, referencing
      existing parameters/metrics by name where possible, and declaring any genuinely new
      parameters/metrics first (in `parameters/*.yaml` / `metrics/*.yaml`) before binding
@@ -209,6 +232,8 @@ Run this when `optimizationPack.yaml` already exists in the current directory.
    - Every `description` field you added or edited is ≤256 characters (§4a).
    - Any categorical parameter you added or edited has its boolean/number/null-looking
      values explicitly quoted as strings (§4b).
+   - Any new/edited fixed-value parameter uses `categorical` or `ordinal` correctly per
+     the tech's own docs (§4c).
 
 ## 7. After either mode
 

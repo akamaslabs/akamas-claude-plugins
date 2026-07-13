@@ -517,6 +517,8 @@ goal: object                             # required — see below
 kpis: [object]                            # optional — see below; derived from goal+constraints if omitted
 windowing: object                          # optional — entire trial window used if omitted
 parametersSelection: "all" | [object]       # optional, default "all"
+parameterConstraints: [object]               # optional — relationships BETWEEN parameters
+                                              # that guide the optimizer's search; see below
 metricsSelection: "all" | [string]           # optional, default "all" — recording only, no effect on optimization
 workloadsSelection: [object]                  # optional — live optimization only
 numberOfTrials: integer                        # optional, default 1 — study-wide default, overridable per step
@@ -627,6 +629,65 @@ Note two parameters used in the same study's baseline step (`vLLM.tensor_paralle
 `vLLM.max_model_len`) are **not** in `parametersSelection` at all — they're pinned to
 fixed values via the baseline step's `values` map, which is independent of, and not
 restricted by, `parametersSelection`. Pinning ≠ tuning.
+
+### `parameterConstraints` — relationships between parameters
+
+Distinct from `parametersSelection` (which narrows *one* parameter's own domain):
+`parameterConstraints` expresses a relationship **between two or more parameters** that
+every configuration the optimizer generates must satisfy — it's how you tell Akamas
+"these parameters aren't independent of each other," so it never even proposes an
+invalid/nonsensical combination (e.g. a max value smaller than a min value, a sum that
+would exceed physically available memory, an instance size only valid alongside a
+specific instance family).
+
+```yaml
+parameterConstraints:
+  - name: string        # required — human-readable label for the constraint
+    formula: string       # required — boolean expression over <Component>.<param> tokens
+```
+
+The `formula` is a boolean expression, not just a single comparison:
+- **Arithmetic** over numeric (real/integer) parameters: `+ - * / ^`, plus `sqrt()` /
+  `log()` / `min()` / `max()`.
+- **Comparison operators**: `> < <= >= == !=`.
+- **Logical operators**: `&&` (AND) and `||` (OR), with `(...)` for grouping — a formula
+  can combine multiple conditions, not just one.
+- **Categorical and ordinal parameters are legal operands too**, compared with `==`/`!=`
+  against a quoted literal category (e.g. `host.aws_ec2_instance_type == "c5"`) — they
+  aren't limited to the real/integer numeric constraints shown below.
+
+Real-world examples (patterns confirmed against Akamas' own optimization guidance for
+JVM, Oracle, and Kubernetes studies):
+```yaml
+parameterConstraints:
+  # Two numeric parameters that must stay in a strict order
+  - name: Max heap must always be greater than the new size
+    formula: jvm.j9vm_maxHeapSize > jvm.j9vm_newSpaceFixed
+
+  # A sum of two parameters bounded by a physical resource limit
+  - name: SGA and PGA must fit in available memory
+    formula: oracle.sga_target + oracle.pga_aggregate_target <= 7609
+
+  # A parameter compared against another component's own parameter
+  - name: Heap should be lower than the container memory limit
+    formula: container.memory_limit > jvm.jvm_heap_size + 50
+
+  # Categorical/ordinal parameters combined with && / || and grouping
+  - name: Valid instance type/size combinations only
+    formula: (host.aws_ec2_instance_type == "c5" && (host.aws_ec2_instance_size == "large" || host.aws_ec2_instance_size == "xlarge"))
+```
+
+**When designing a study, always ask the user explicitly whether any relationships
+between parameters need to be enforced** (a max/min ordering, a combined resource limit,
+categorical/ordinal combinations that are only valid together) — these are easy for a
+user to forget to mention up front, and an unconstrained study can waste trials on, or
+even fail on, physically/logically invalid configurations that `parameterConstraints`
+would have ruled out. Don't wait for the user to bring it up unprompted.
+
+**Every `<Component>.<param>` token used in a `formula` must resolve exactly like every
+other cross-reference in this document** (§7): the left-hand `Component` is a component's
+own `name` in this study's system, and the parameter must be bound to that component's
+component type in the referenced optimization pack (or another confirmed-existing pack).
 
 ### `metricsSelection` / `workloadsSelection` (siblings of `parametersSelection`)
 
@@ -866,6 +927,14 @@ component type," or "this pack doesn't have a metric for X yet"), that's a job f
 10. **No separate pause/stop verb** — `akamas finish study <id|name>` is overloaded to
     mean both a permanent stop and a resumable pause; resume with
     `akamas resume study <id|name> [-m NEW|DEL|KEEP]` (default `KEEP`).
+11. **No single, dedicated `parameterConstraints` reference page** was found alongside the
+    other study-template sub-pages (`goal-and-constraints`, `parameter-selection`, etc.) —
+    its schema (`name`/`formula`, comparison + `&&`/`||` logical operators, categorical/
+    ordinal operands compared with `==`/`!=`) is synthesized from Akamas' own
+    optimization-scenario guides (JVM, Oracle, Kubernetes) rather than one authoritative
+    schema table. Cross-check the live docs before relying on an unusual formula shape
+    (e.g. one mixing arithmetic and logical operators in a single constraint) that isn't
+    covered by the examples in this document.
 11. **A third, undocumented templating syntax exists alongside `$KEY$` and
     `${Component.param}`.** The real example's telemetry instance uses
     `histogram_quantile(${percentile}, ...)` in two metrics

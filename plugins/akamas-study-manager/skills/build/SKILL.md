@@ -30,7 +30,8 @@ file — read both reference files that ship alongside this skill, in this skill
 
 - `reference/study-schema.md` — the authoritative directory layout and YAML schema for
   every file type a study needs (`system.yaml`, `component.yaml`, `telemetry-instance.yaml`,
-  the workflow file, the study manifest), the workflow-operator table, the
+  the workflow file, the study manifest), the workflow-operator table, `parameterConstraints`
+  (relationships between parameters, incl. `&&`/`||` and categorical/ordinal operands), the
   `${Component.param}` / `$KEY$` templating mechanisms, the cross-resource addressing
   convention, and known documentation gaps.
 - `reference/akamas-cli.md` — the `akamas` CLI commands for creating, listing,
@@ -117,6 +118,16 @@ Run this when no top-level file with `kind: study` was found in the target direc
    - The optimization pack's location (local path or git URL) — see §3. Do this before
      asking any technology-specific question, since the pack tells you what's actually
      available to reference.
+   - **Whether any relationships between parameters need to be enforced** — e.g. one
+     parameter must always be greater/less than another, a sum of several parameters must
+     stay under a physical resource limit, or only certain categorical/ordinal value
+     combinations are valid together. Always ask this explicitly, even if the user hasn't
+     brought it up — these are easy to forget up front and, left unenforced, let the
+     optimizer waste trials on (or fail on) invalid configurations. If the user confirms
+     any, they become `parameterConstraints` entries in the study manifest (see
+     `reference/study-schema.md`'s `parameterConstraints` section for the exact syntax,
+     including the `&&`/`||` logical operators and how to reference categorical/ordinal
+     parameters).
    - **How configuration changes actually get applied to the real target system** — e.g.
      a templated Kubernetes manifest applied via `kubectl` over SSH, an Ansible
      playbook, a REST config API, a direct config-file edit + service restart, etc. This
@@ -197,7 +208,8 @@ Run this when no top-level file with `kind: study` was found in the target direc
    - Write the study manifest's `goal` (and `constraints`/`kpis` if applicable),
      `windowing` (or explicitly omit it, noting the "entire trial window" default),
      `parametersSelection` (only for parameters the pack actually declares, with domains
-     that are subsets of the pack's declared domain), and `steps` (typically at least one
+     that are subsets of the pack's declared domain), `parameterConstraints` (if step 1
+     surfaced any relationships between parameters), and `steps` (typically at least one
      `baseline` step pinning known-good values, then one `optimize` step).
 4. **Write the README.md in English**, well-structured, covering at minimum:
    - What the study optimizes (the goal, in plain language) and against what system.
@@ -229,6 +241,9 @@ Run this when no top-level file with `kind: study` was found in the target direc
      name declared by the pack and bound to the referencing component's component type.
    - Every `parametersSelection[].domain`/`categories` is a subset of the domain the
      pack's component type already declares for that parameter.
+   - Every `parameterConstraints[].formula` token resolves the same way as any other
+     `<Component>.<param>` cross-reference, and the user was explicitly asked whether any
+     parameter relationships needed enforcing (not just left to volunteer it).
    - `windowing.task` (if set) matches an actual task `name` in the workflow file.
    - Every telemetry metric referenced by the study/goal has a producing entry in some
      telemetry instance in the same system.
@@ -249,7 +264,11 @@ study root.
 
 1. **Ask what's changing**, if not already stated: add/change a component, add/change a
    telemetry metric binding, add/change a workflow task, or change the study's
-   `parametersSelection`/`goal`/`steps` (or something else entirely).
+   `parametersSelection`/`parameterConstraints`/`goal`/`steps` (or something else
+   entirely). If the change adds or changes parameters in play, also ask explicitly
+   whether any new relationships between parameters need to be enforced (same question as
+   Create mode §5 step 1) — don't assume the existing `parameterConstraints` (if any) are
+   still complete.
 2. Re-resolve the optimization pack (§3) before editing anything that references pack
    vocabulary, so you're validating against current pack contents, not stale memory from
    a previous run.
@@ -268,10 +287,11 @@ study root.
      include the full-log-dump-to-stdout requirement from §5 step 3 — if you're editing a
      pre-existing script that's missing it, add it as part of this edit and tell the user
      you did so; never silently drop it during an edit.
-   - **Study-level change** (`parametersSelection`/`goal`/`constraints`/`kpis`/`windowing`/
-     `steps`): edit the study manifest directly. Keep any narrowed
-     `parametersSelection` domain a subset of the pack's declared domain for that
-     parameter.
+   - **Study-level change** (`parametersSelection`/`parameterConstraints`/`goal`/
+     `constraints`/`kpis`/`windowing`/`steps`): edit the study manifest directly. Keep any
+     narrowed `parametersSelection` domain a subset of the pack's declared domain for that
+     parameter, and make sure every `parameterConstraints[].formula` token still resolves
+     to a real `<Component>.<param>` in the system.
 4. **Update the README.md**:
    - Add at least a "last modified" note (date + one-line summary of the change)
      whenever the change is structural (added/removed/renamed a resource, changed the
