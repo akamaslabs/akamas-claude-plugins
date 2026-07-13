@@ -48,9 +48,9 @@ properties: object     # optional, free-form
 parameters:             # required array — binds parameters declared in parameters/*.yaml
   - name: string                       # must match a name in parameters/*.yaml
     domain:
-      type: real | integer | categorical
+      type: real | integer | categorical | ordinal   # see "categorical vs ordinal" below
       domain: [min, max]               # for real/integer
-      categories: [a, b, c]            # for categorical — ALWAYS quote values that
+      categories: [a, b, c]            # for categorical/ordinal — ALWAYS quote values that
                                         # look like YAML booleans/numbers/null (true,
                                         # false, yes, no, on, off, ~) as strings, e.g.
                                         # ["true", "false"], never [true, false]
@@ -62,6 +62,49 @@ parameters:             # required array — binds parameters declared in parame
 metrics:                 # required array — binds metrics declared in metrics/*.yaml
   - name: string          # must match a name in metrics/*.yaml
 ```
+
+### Categorical vs ordinal — pick the right one by reading the tech's own docs
+
+Akamas parameters with a fixed set of literal values come in two flavors, and they are
+**not interchangeable** — using the wrong one changes how the optimizer explores the
+space (categorical treats every value as equally "far" from every other; ordinal exploits
+the fact that values have a natural rank, so it can reason about "smaller/larger" and
+interpolate between neighbors):
+
+- **`categorical`** — a set of literal values with **no meaningful order** (e.g. a GC
+  algorithm name, a scheduler policy, an on/off flag modeled as `["true", "false"]`).
+  Confirmed in the authoritative schema reference (`domain->type` enum:
+  `{real, integer, categorical}`).
+- **`ordinal`** — a set of literal values that **do have a meaningful, real-world order**,
+  even though they aren't numeric (e.g. instance sizes, discrete power-of-2 buffer sizes).
+  The list order in `categories:` *is* the rank order. Confirmed against real,
+  Akamas-shipped optimization packs' own parameter reference tables — not the generic
+  schema page (see gap below):
+  - AWS EC2 pack: `aws_ec2_instance_size` is typed **Ordinal**, domain
+    `[nano, micro, small, medium, large, xlarge, 2xlarge, 4xlarge, 8xlarge, 9xlarge,
+    12xlarge, 16xlarge, 18xlarge, 24xlarge]` — while the sibling `aws_ec2_instance_type`
+    (a family name like `c5`/`m5`/`r5`, no natural order) is typed **Categorical**.
+  - Node.js pack: `v8_max_semi_space_size_ordinal` is typed **Ordinal**, domain a list of
+    power-of-2 sizes (`2, 4, 6, 8, 16, 32, ..., 32768`).
+
+**Before adding a parameter to a pack, always read the target technology's own
+documentation for that setting** (JVM flag reference, vLLM engine args, database
+parameter docs, etc.) to determine whether its legal values are genuinely unordered
+(→ `categorical`) or have a natural rank (→ `ordinal`) — don't default to `categorical`
+just because it's the more familiar/documented type. Enum-like knobs (algorithm/policy
+names, on/off flags) are `categorical`; size/tier/level-like knobs with a handful of
+discrete steps are `ordinal`.
+
+**Known gap**: the generic component-type schema reference page
+(`construct-templates/component-types-template`) enumerates `domain->type` as only
+`{real, integer, categorical}` — it does not list `ordinal` at all, even though real
+shipped Akamas packs (above) declare parameters with type `Ordinal` in their own reference
+tables. Treat `ordinal` as real and intentional (it changes optimizer behavior, it's not
+just a documentation label), but cross-check the live docs/CLI before relying on the exact
+literal `type: ordinal` YAML syntax for a brand-new pack — if `akamas build` rejects it,
+fall back to `categorical` with `categories:` listed in ascending logical order (Akamas
+normalizes categorical/ordinal domains to integer positions internally, so list order is
+what encodes the rank either way).
 
 Real example (vLLM, abridged):
 ```yaml
@@ -176,3 +219,9 @@ omit this entirely and rely on existing providers (Prometheus, Dynatrace, CSV, .
    (`enable_expert_parallel`, `enforce_eager`, `disable_cascade_attn`,
    `async_scheduling`, `disable_custom_all_reduce`) that had unquoted `true`/`false`
    while the rest of the pack's categorical parameters correctly used quoted strings.
+8. `ordinal` is a real, distinct parameter domain type — confirmed against real shipped
+   packs' own parameter tables (AWS EC2's `aws_ec2_instance_size`, Node.js's
+   `v8_max_semi_space_size_ordinal`) — but the generic component-type schema page only
+   documents `domain->type: {real, integer, categorical}` and never mentions `ordinal`.
+   See "Categorical vs ordinal" above for how to tell them apart and what to do if
+   `type: ordinal` isn't accepted at build time.

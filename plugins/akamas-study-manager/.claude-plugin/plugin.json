@@ -1,6 +1,6 @@
 {
   "name": "akamas-study-manager",
   "description": "Scaffold a new Akamas study from scratch (system, components, telemetry instances, workflow, and study manifest) or safely modify an existing one, grounded in a goal description and an existing optimization pack.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": { "name": "Akamas" }
 }

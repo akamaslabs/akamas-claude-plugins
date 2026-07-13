@@ -10,6 +10,7 @@ maintain Akamas optimization pack repositories (like `optimization-packs/vllm`).
 
 - **[akamas-optimization-pack](plugins/akamas-optimization-pack/README.md)** — scaffold new Akamas optimization packs and safely modify existing ones.
 - **[akamas-study-manager](plugins/akamas-study-manager/README.md)** — scaffold new Akamas studies (system, components, telemetry, workflow, study manifest) and safely modify existing ones.
+- **[akamas-study-analyzer](plugins/akamas-study-analyzer/README.md)** — deeply analyze a finished Akamas study's exported results and produce an HTML findings report plus README recap.
 
 ## Installing from this repo
 
@@ -19,6 +20,7 @@ Add this repo as a plugin marketplace, then install a plugin from it:
 /plugin marketplace add akamaslabs/akamas-claude-plugins
 /plugin install akamas-optimization-pack
 /plugin install akamas-study-manager
+/plugin install akamas-study-analyzer
 ```
 
 ## Testing a plugin locally

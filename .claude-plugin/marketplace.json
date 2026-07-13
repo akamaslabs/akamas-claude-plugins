@@ -11,6 +11,11 @@
       "name": "akamas-study-manager",
       "source": "./plugins/akamas-study-manager",
       "description": "Scaffold new Akamas studies (system, components, telemetry, workflow, study) and safely modify existing ones."
+    },
+    {
+      "name": "akamas-study-analyzer",
+      "source": "./plugins/akamas-study-analyzer",
+      "description": "Deeply analyze a finished Akamas study's exported results and produce an HTML findings report plus README recap."
     }
   ]
 }
