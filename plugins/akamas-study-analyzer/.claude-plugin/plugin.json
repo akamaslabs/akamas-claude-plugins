@@ -1,0 +1,6 @@
+{
+  "name": "akamas-study-analyzer",
+  "description": "Deeply analyze a finished Akamas study's exported results (experiments, parameter combinations, metric timeseries) against its config and README, and produce an HTML findings report plus a README recap.",
+  "version": "0.1.0",
+  "author": { "name": "Akamas" }
+}
