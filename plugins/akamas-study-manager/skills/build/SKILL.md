@@ -128,6 +128,18 @@ Run this when no top-level file with `kind: study` was found in the target direc
      `reference/study-schema.md`'s `parameterConstraints` section for the exact syntax,
      including the `&&`/`||` logical operators and how to reference categorical/ordinal
      parameters).
+   - **Whether the baseline (or preset) experiment should skip rendering any
+     optimization-scope parameter** — by default a `baseline`/`preset`/`optimize` step
+     renders every parameter already in its own `values` map *and* every parameter in
+     `parametersSelection`. If a parameter under optimization shouldn't actually be
+     touched during the baseline run (e.g. no meaningful baseline value for it, or the
+     template token only makes sense mid-optimization), ask explicitly — the answer
+     becomes that step's `doNotRenderParameters` (supports `<Component>.<param>` or the
+     `<Component>.*` wildcard for every parameter on a component), with `renderParameters`
+     as the inverse (force-render a parameter that's in neither `values` nor
+     `parametersSelection`). See `reference/study-schema.md`'s "Parameter rendering"
+     section for the exact syntax, the `from`-mutual-exclusivity restriction, and worked
+     examples.
    - **How configuration changes actually get applied to the real target system** — e.g.
      a templated Kubernetes manifest applied via `kubectl` over SSH, an Ansible
      playbook, a REST config API, a direct config-file edit + service restart, etc. This
@@ -210,7 +222,10 @@ Run this when no top-level file with `kind: study` was found in the target direc
      `parametersSelection` (only for parameters the pack actually declares, with domains
      that are subsets of the pack's declared domain), `parameterConstraints` (if step 1
      surfaced any relationships between parameters), and `steps` (typically at least one
-     `baseline` step pinning known-good values, then one `optimize` step).
+     `baseline` step pinning known-good values, then one `optimize` step). If step 1
+     surfaced any optimization-scope parameter that the baseline/preset/optimize step
+     shouldn't render, add `doNotRenderParameters`/`renderParameters` (wildcards allowed
+     via `<Component>.*`) to that step — never on a step that also uses `from`.
 4. **Write the README.md in English**, well-structured, covering at minimum:
    - What the study optimizes (the goal, in plain language) and against what system.
    - **The creation date** (hard requirement).
@@ -244,6 +259,9 @@ Run this when no top-level file with `kind: study` was found in the target direc
    - Every `parameterConstraints[].formula` token resolves the same way as any other
      `<Component>.<param>` cross-reference, and the user was explicitly asked whether any
      parameter relationships needed enforcing (not just left to volunteer it).
+   - Every `renderParameters`/`doNotRenderParameters` entry is a `<Component>.<param>` (or
+     `<Component>.*` wildcard) that resolves like any other cross-reference, and neither
+     field is set on a step that also uses `from`.
    - `windowing.task` (if set) matches an actual task `name` in the workflow file.
    - Every telemetry metric referenced by the study/goal has a producing entry in some
      telemetry instance in the same system.
@@ -291,7 +309,11 @@ study root.
      `constraints`/`kpis`/`windowing`/`steps`): edit the study manifest directly. Keep any
      narrowed `parametersSelection` domain a subset of the pack's declared domain for that
      parameter, and make sure every `parameterConstraints[].formula` token still resolves
-     to a real `<Component>.<param>` in the system.
+     to a real `<Component>.<param>` in the system. If a parameter is being added to (or
+     removed from) `parametersSelection`, re-check every `baseline`/`preset`/`optimize`
+     step's `renderParameters`/`doNotRenderParameters` — a newly-added optimization-scope
+     parameter now renders by default unless excluded, and a removed one may leave a stale
+     `doNotRenderParameters` entry that no longer matters (harmless, but worth flagging).
 4. **Update the README.md**:
    - Add at least a "last modified" note (date + one-line summary of the change)
      whenever the change is structural (added/removed/renamed a resource, changed the

@@ -741,8 +741,8 @@ Common fields on every step: `name` (required), `type` (required — one of
   from:                              # optional; mutually exclusive with `values`
     - study: string
       experiments: [integer]
-  renderParameters: string             # optional
-  doNotRenderParameters: string          # optional
+  renderParameters: [string]           # optional; NOT allowed together with `from` (see below)
+  doNotRenderParameters: [string]        # optional; NOT allowed together with `from` (see below)
 
 # type: optimize — the actual search loop
 - name: string
@@ -755,6 +755,8 @@ Common fields on every step: `name` (required), `type` (required — one of
                                           # exceeded (counts workflow errors + constraint
                                           # violations)
   optimizer: AKAMAS | SOBOL | RANDOM      # optional, default AKAMAS
+  renderParameters: [string]              # optional — see "Parameter rendering" below
+  doNotRenderParameters: [string]           # optional — see "Parameter rendering" below
 
 # type: bootstrap — reuse experiments already run in other studies
 - name: string
@@ -762,6 +764,8 @@ Common fields on every step: `name` (required), `type` (required — one of
   from:
     - study: string
       experiments: [integer]   # optional — omit to import all
+  # renderParameters/doNotRenderParameters are NOT available here — a bootstrapped
+  # experiment isn't actually executed, so there's nothing to render into
 
 # type: preset — run one experiment at a specific already-known configuration
 - name: string
@@ -771,6 +775,8 @@ Common fields on every step: `name` (required), `type` (required — one of
   from:
     - study: string            # optional, defaults to current study
       experiments: [integer]    # required, single experiment number
+  renderParameters: [string]     # optional; NOT allowed together with `from` (see below)
+  doNotRenderParameters: [string]  # optional; NOT allowed together with `from` (see below)
 ```
 
 Real example — one pinned `baseline` step, one open-ended `optimize` step:
@@ -796,6 +802,73 @@ Flag to anyone copying this pattern: `maxFailedExperiments` (1000) equals
 describe (default 30) — the step can never abort early on failures since it would need
 more failures than its entire experiment budget. Legitimate, but worth calling out
 explicitly since it silently opts out of a safety default.
+
+### Parameter rendering — `renderParameters` / `doNotRenderParameters` (wildcards)
+
+Source: `reference/construct-templates/study-template/parameter-rendering` (live docs;
+not covered by the bundled schema tables above, which only listed the field names).
+
+These two step-level fields control **which parameters actually get rendered/applied**
+into the experiment's configuration when a `baseline`, `preset`, or `optimize` step
+executes — independent of, and layered on top of, whatever `values` (baseline/preset)
+or `parametersSelection` (optimize) already contribute:
+
+```yaml
+renderParameters: [string]        # optional — parameters to render/apply IN ADDITION to
+                                    # the ones already in `values` or parametersSelection
+doNotRenderParameters: [string]     # optional — parameters to exclude from rendering, even
+                                      # if they're in `values` or parametersSelection
+```
+
+- **Type**: both are **arrays of strings**, not a single string.
+- **Entry format**: each string is either `<Component>.<param>` (one specific parameter)
+  or `<Component>.*` (**wildcard** — every parameter bound to that component). The `*`
+  is the only wildcard form documented; there's no cross-component glob (e.g. no `*.foo`).
+- **Applicable step types**: `baseline`, `preset`, `optimize`. **Not available on
+  `bootstrap`** — a bootstrapped experiment reuses a past experiment's data and isn't
+  actually executed, so there's nothing to render.
+- **Mutually exclusive with `from`** on `baseline`/`preset`: "this cannot be used when
+  using a *from* option since no experiment is actually executed" — same reasoning as the
+  bootstrap restriction above.
+- **This is exactly the mechanism for the common ask "omit an optimization-scope
+  parameter from the baseline render"**: by default, a `baseline` step renders every
+  parameter already in its own `values` map *and* every parameter currently in
+  `parametersSelection` (the optimizer's scope). If one of those optimization-scope
+  parameters shouldn't actually be touched during the baseline experiment (e.g. its
+  template token isn't meaningful outside an actual optimize trial, or the real baseline
+  config simply doesn't set it), add it — or its whole component via `Component.*` — to
+  that step's `doNotRenderParameters`. Conversely, `renderParameters` pulls in a parameter
+  that's neither pinned in `values` nor part of `parametersSelection`, forcing it to
+  render anyway.
+
+Verbatim examples from the live docs:
+```yaml
+name: "mybaseline"
+type: "baseline"
+values:
+  jvm.jvm_compilation_threads: 10
+  jvm.jvm_gcType: -XX:+UseG1GC
+doNotRenderParameters: ["os.*"]
+renderParameters: ["docker.cpu_limit"]
+```
+```yaml
+name: "mypreset"
+type: "preset"
+values:
+  jvm.jvm_compilation_threads: 10
+  jvm.jvm_gcType: -XX:+UseG1GC
+renderParameters: ["docker.cpu_limit"]
+```
+```yaml
+name: "myoptimize"
+type: "optimize"
+numberOfExperiment: 200
+doNotRenderParameters: ["os.*"]
+```
+The first example: the `jvm.*` values render as usual, every `os.*` parameter is
+excluded from rendering regardless of whether it's in `parametersSelection`, and
+`docker.cpu_limit` is force-rendered even though it appears in neither `values` nor
+(implicitly) `parametersSelection` for this step.
 
 ---
 
